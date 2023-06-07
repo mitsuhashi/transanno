@@ -3,6 +3,7 @@ use crate::cli::validate_integer;
 use anyhow::Context;
 use autocompress::{create, open, CompressionLevel};
 use bio::io::fasta::IndexedReader;
+use std::fs::File;
 use clap::{App, Arg, ArgMatches};
 use liftover::{chain, variantlift, vcflift, LiftOverError};
 use log::info;
@@ -25,6 +26,15 @@ impl Command for LiftVcf {
                 .help("Original assembly FASTA (.fai file is required)"),
         )
         .arg(
+            Arg::with_name("reference_sequence_fai")
+                .long("original-assembly-fai")
+                .alias("reference_fai")
+                .short("r_fai")
+                .takes_value(true)
+                .required(true)
+                .help(".fai file for Original assembly FASTA"),
+        )
+        .arg(
             Arg::with_name("query_sequence")
                 .long("new-assembly")
                 .alias("query")
@@ -32,6 +42,15 @@ impl Command for LiftVcf {
                 .takes_value(true)
                 .required(true)
                 .help("New assembly FASTA (.fai file is required)"),
+        )
+        .arg(
+            Arg::with_name("query_sequence_fai")
+                .long("new-assembly-fai")
+                .alias("query_fai")
+                .short("q_fai")
+                .takes_value(true)
+                .required(true)
+                .help(".fai file for New assembly FASTA"),
         )
         .arg(
             Arg::with_name("chain")
@@ -127,10 +146,14 @@ impl Command for LiftVcf {
     fn run(&self, matches: &ArgMatches<'static>) -> anyhow::Result<()> {
         info!("start loading chain and fasta");
         let mut original_seq =
-            IndexedReader::from_file(&matches.value_of("reference_sequence").unwrap())
+            IndexedReader::new(File::open(&matches.value_of("reference_sequence").unwrap())?,
+                               File::open(&matches.value_of("reference_sequence_fai").unwrap())?)
                 .context("Failed to load original assembly FASTA")?;
-        let mut new_seq = IndexedReader::from_file(&matches.value_of("query_sequence").unwrap())
-            .context("Failed to load new assembly FASTA")?;
+
+        let mut new_seq =
+             IndexedReader::new(File::open(&matches.value_of("query_sequence").unwrap())?,
+                                File::open(&matches.value_of("query_sequence_fai").unwrap())?)
+                .context("Failed to load new assembly FASTA")?;
         let chain =
             chain::ChainFile::load(autocompress::open(matches.value_of("chain").unwrap())?)?
                 .left_align(&mut original_seq, &mut new_seq)
